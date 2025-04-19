@@ -4,6 +4,7 @@ import os
 import pytesseract
 import re
 import numpy as np
+import requests  # ✅ Added for API calls
 
 # --------------------------
 # DETECT.PY SECTION
@@ -99,7 +100,6 @@ def detect_plate_color(image):
         return "Unknown"
 
 def correct_ocr_errors(plate):
-   
     # Define allowed series codes for your region. If "CO" should be allowed, include it.
     allowed_series_codes = {"CQ", "CR", "AB", "XY"}  # <-- Update as needed.
     
@@ -111,6 +111,24 @@ def correct_ocr_errors(plate):
             if series == "CO" and "CO" not in allowed_series_codes:
                 plate = plate[:4] + "CQ" + plate[6:]
     return plate
+
+# ✅ Function to send API request
+def send_entry_to_api(plate_number, image_name, entry_gate=3, vehicle_type="PRIVATE"):
+    url = "http://localhost:8080/api/vehicles/entry"
+    payload = {
+        "vehicleNumber": plate_number,
+        "entryGate": entry_gate,
+        "vehicleType": vehicle_type,
+        "imageName": image_name
+    }
+    try:
+        response = requests.post(url, json=payload)
+        if response.status_code == 200:
+            print(f"✅ API Success: Vehicle {plate_number} logged successfully.")
+        else:
+            print(f"❌ API Error [{response.status_code}]: {response.text}")
+    except Exception as e:
+        print(f"⚠️ Exception during API call: {e}")
 
 # --------------------------
 # MAIN EXECUTION
@@ -192,6 +210,12 @@ if __name__ == "__main__":
             plate_to_files[corrected_text] = [image_path]
             print(f"Extracted Text from {image_name}: {corrected_text}")
             print(f"Detected Plate Color: {plate_color}")
+
+            # ✅ Call the API only for valid state code and plate length
+            if corrected_text[:2] in valid_state_codes and len(corrected_text) >= 6:
+                send_entry_to_api(corrected_text, image_name)
+            else:
+                print(f"⚠️ Skipping API call for invalid or incomplete plate: {corrected_text}")
 
     # After processing, remove duplicate image files
     print("\nRemoving duplicate images. Only one image per unique license plate will be kept.")
